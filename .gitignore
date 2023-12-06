@@ -1,0 +1,7 @@
+MNIST/
+*.tar.gz
+datasets
+__pycache__
+models/
+*.pt
+samples/
