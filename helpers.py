@@ -98,7 +98,7 @@ def get_dataloader(dataset_type = "", batch_size = 8, img_sz = 128):
     else:
         ds = BikesDataset(dataset_path, img_sz = img_sz)
     
-    print(f"Training on {len(ds)} samples ...")
+    print(f"Training on {len(ds)} samples; with batch size {batch_size}; image dims {image_dims} ...")
     return DataLoader(ds, batch_size = batch_size, shuffle = True, drop_last = True)
 
 

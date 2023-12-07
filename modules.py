@@ -153,22 +153,6 @@ class ResnetBlock(nn.Module):
         x = self.norm(x)
         # print(f"down block x: {x.shape}")
         return self.act(x)
-        
-
-class UpBlock(nn.Module):
-    def __init__(self, in_c, out_c, use_norm = True) -> None:
-        super().__init__()
-        self.up = nn.ConvTranspose2d(in_c, out_c, kernel_size=2, stride=2, padding=0)
-        self.conv = nn.Conv2d(out_c, out_c, kernel_size = 3, padding = 1)
-        self.norm = nn.GroupNorm(num_groups = 8, num_channels = out_c) if use_norm else None
-        self.act = nn.ReLU()
-
-    def forward(self, x):
-        x = self.up(x)
-        x = self.conv(x)
-        x = self.norm(x) if self.norm else x
-        # print(f"upblock: {x.shape}")
-        return self.act(x)
 
 
 class Encoder(nn.Module):
@@ -187,17 +171,34 @@ class Encoder(nn.Module):
         for _block in self.blocks:
             x = _block(x)
 
-        x = torch.tanh(x)
+        # x = torch.tanh(x)
         return x
+
+
+class UpBlock(nn.Module):
+    def __init__(self, in_c, out_c, num_groups = 8, activation = "leaky_relu") -> None:
+        super().__init__()
+        self.up = nn.ConvTranspose2d(in_c, out_c, kernel_size=2, stride=2, padding=0)
+        self.conv = nn.Conv2d(out_c, out_c, kernel_size = 3, padding = 1)
+        self.norm = nn.GroupNorm(num_groups = num_groups, num_channels = out_c)
+        # self.act = nn.Tanh() if activation == "tanh" else nn.LeakyReLU()
+        self.act = nn.LeakyReLU() if activation == "leaky_relu" else nn.Tanh()
+
+    def forward(self, x):
+        x = self.up(x)
+        # x = self.conv(x)
+        x = self.norm(x)
+        # print(f"upblock: {x.shape}")
+        return self.act(x)
 
 
 class Decoder(nn.Module):
     # VAE's Decoder Module
-    def __init__(self, input_channels = 3, dims = [128, 64, 32]) -> None:
+    def __init__(self, output_channels = 3, dims = [128, 64, 32]) -> None:
         super().__init__()
         self.dims = dims # dims to be the reverse of dims passed in the encoder block
         self.up_blocks = nn.ModuleList([UpBlock(in_c = dims[i], out_c = self.dims[i + 1]) for i in range(len(self.dims) - 1)])
-        self.final_block = UpBlock(dims[-1], input_channels, use_norm = False)
+        self.final_block = UpBlock(dims[-1], output_channels, num_groups = 1, activation = "tanh") # equivalent to layer norm here because we set num_groups to 1
 
     def forward(self, x):
 
@@ -205,13 +206,9 @@ class Decoder(nn.Module):
             x = _block(x)
 
         x = self.final_block(x)
-        # x = torch.tanh(x)
-        x = F.relu(x)
         return x
 
 
-
-    
 
 if __name__ == "__main__":    
     # device = "cuda:0"

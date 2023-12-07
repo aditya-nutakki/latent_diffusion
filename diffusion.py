@@ -10,7 +10,7 @@ from helpers import *
 from config import *
 
 
-os.makedirs(save_dir, exist_ok = True)
+os.makedirs(model_save_dir, exist_ok = True)
 os.makedirs(img_save_dir, exist_ok = True)
 
 
@@ -73,7 +73,7 @@ class DiffusionModel(nn.Module):
 
 
 
-def train_ddpm(time_steps, epochs = epochs):
+def train_ddpm(time_steps = time_steps, epochs = epochs):
     ddpm = DiffusionModel(time_steps = time_steps)
     c, h, w = diffusion_model_dims
     assert h == w, f"height and width must be same, got {h} as height and {w} as width"
