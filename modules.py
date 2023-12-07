@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 """ Convolutional block:
     It follows a two 3x3 convolutional layer, each followed by a batch normalization and a relu activation.
@@ -136,13 +137,103 @@ class UNet(nn.Module):
         return outputs
 
 
+class ResnetBlock(nn.Module):
+    def __init__(self, in_c, out_c) -> None:
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels = in_c, out_channels = out_c, kernel_size = 3, padding = 1)
+        self.norm = nn.GroupNorm(num_groups = 8, num_channels = out_c)
+
+        self.pool = nn.MaxPool2d((2,2))
+        self.act = nn.ReLU()
+
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.pool(x)
+        x = self.norm(x)
+        # print(f"down block x: {x.shape}")
+        return self.act(x)
+        
+
+class UpBlock(nn.Module):
+    def __init__(self, in_c, out_c, use_norm = True) -> None:
+        super().__init__()
+        self.up = nn.ConvTranspose2d(in_c, out_c, kernel_size=2, stride=2, padding=0)
+        self.conv = nn.Conv2d(out_c, out_c, kernel_size = 3, padding = 1)
+        self.norm = nn.GroupNorm(num_groups = 8, num_channels = out_c) if use_norm else None
+        self.act = nn.ReLU()
+
+    def forward(self, x):
+        x = self.up(x)
+        x = self.conv(x)
+        x = self.norm(x) if self.norm else x
+        # print(f"upblock: {x.shape}")
+        return self.act(x)
+
+
+class Encoder(nn.Module):
+    # VAE's Encoder Module
+    def __init__(self, input_channels = 3, dims = [32, 64, 128]) -> None:
+        super().__init__()
+        # self.input_channels = input_channels
+        self.dims = dims
+
+        self.init_block = ResnetBlock(in_c = input_channels, out_c = self.dims[0])
+        self.blocks = nn.ModuleList([ResnetBlock(in_c = self.dims[i], out_c = self.dims[i + 1]) for i in range(len(self.dims) - 1)])
+
+    def forward(self, x):
+        x = self.init_block(x)
+        
+        for _block in self.blocks:
+            x = _block(x)
+
+        x = torch.tanh(x)
+        return x
+
+
+class Decoder(nn.Module):
+    # VAE's Decoder Module
+    def __init__(self, input_channels = 3, dims = [128, 64, 32]) -> None:
+        super().__init__()
+        self.dims = dims # dims to be the reverse of dims passed in the encoder block
+        self.up_blocks = nn.ModuleList([UpBlock(in_c = dims[i], out_c = self.dims[i + 1]) for i in range(len(self.dims) - 1)])
+        self.final_block = UpBlock(dims[-1], input_channels, use_norm = False)
+
+    def forward(self, x):
+
+        for _block in self.up_blocks:
+            x = _block(x)
+
+        x = self.final_block(x)
+        # x = torch.tanh(x)
+        x = F.relu(x)
+        return x
+
+
+
+    
+
 if __name__ == "__main__":    
-    device = "cuda:0"
-    batch_size = 2
-    in_channels, w = 3, 128
-    inputs = torch.randn((batch_size, in_channels, w, w), device=device)
-    randints = torch.randint(1, 512, (batch_size, ), device=device)
-    model = UNet().to(device)
-    print(f"model has {sum([p.numel() for p in model.parameters()])} params")
-    y = model(inputs, randints)
-    print(y.shape)
+    # device = "cuda:0"
+    # batch_size = 2
+    # in_channels, w = 3, 128
+    # inputs = torch.randn((batch_size, in_channels, w, w), device=device)
+    # randints = torch.randint(1, 512, (batch_size, ), device=device)
+    # model = UNet().to(device)
+    # print(f"model has {sum([p.numel() for p in model.parameters()])} params")
+    # y = model(inputs, randints)
+    # print(y.shape)
+    
+
+    # x = torch.randn(4, 3, 128, 128)
+    # enc = Encoder(m = 4, latent_channels= 64)
+    # y = enc(x)
+    # print(y.shape, y.mean(), y.std())
+    # print()
+    
+    # dec = Decoder()
+    # # y = torch.randn(4, 128, 4, 4)
+    # z = dec(y)
+    # print(z.shape, z.mean(), z.std())
+
+    pass

@@ -87,9 +87,10 @@ def train_ddpm(time_steps, epochs = epochs):
     for ep in range(epochs):
         ddpm.model.train()
         print(f"Epoch {ep}:")
-        # for i, x in enumerate(loader):
         losses = []
         stime = time()
+        
+        # for i, x in enumerate(loader):
         for i, (x, _) in enumerate(loader):
             bs = x.shape[0]
             x = x.to(device)
