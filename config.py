@@ -11,8 +11,8 @@ time_steps = 512
 
 autoencoder_model_path = f"/mnt/d/work/projects/latent_diffusion/models/autoencoder_{m}_{c}_{starting_filters}_{img_sz}.pt"
 device = "cuda"
-batch_size = 24
-epochs = 1000
+batch_size = 48
+epochs = 10000
 lr = 3e-4
 dataset_path = "/mnt/d/work/datasets/bikes/white_bg"
 

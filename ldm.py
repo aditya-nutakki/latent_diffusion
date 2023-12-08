@@ -81,6 +81,11 @@ class LatentDiffusion(nn.Module):
         print(f"Done denoising in {ftime - stime}s ")
 
 
+    def save_model(self, ep):
+        model_path = os.path.join(model_save_dir, f"ldm_{ep}.pt")
+        torch.save(self.state_dict(), model_path)
+
+
     def forward(self, x):
         bs = x.shape[0]
         z = self.autoencoder.encoder(x) # get latent space
@@ -106,7 +111,7 @@ def train_ldm():
     ldm.autoencoder.to(device)
     ldm.diffusion_model.model.to(device)
     print(f"Model training on m = {m}, c = {c}, image_dims = {image_dims}")
-    
+
     for ep in range(epochs):
         ldm.diffusion_model.model.train()
         print(f"Epoch {ep}:")
@@ -115,14 +120,11 @@ def train_ldm():
         
         for i, x in enumerate(loader):
         # for i, (x, _) in enumerate(loader):
-
             x = x.to(device)
-            # ts = torch.randint(low = 1, high = ddpm.time_steps, size = (bs, ), device = device)            
-            # x, target_noise = ddpm.add_noise(x, ts)
             # print(f"init x shape {x.shape}")
             z_noised, target_noise, ts = ldm(x)
             # print(f"znoised shape {z_noised.shape}")
-            # print(x.shape)
+
             predicted_noise = ldm.diffusion_model.model(z_noised, ts)
             loss = criterion(target_noise, predicted_noise)
             
@@ -138,9 +140,11 @@ def train_ldm():
         ftime = time()
         print(f"Epoch trained in {ftime - stime}s; Avg loss => {sum(losses)/len(losses)}")
 
-        if (ep + 5) % 1 == 0:
+        if (ep) % 10 == 0:
             ldm.sample(ep)
-        
+            ldm.save_model(ep)
+            print("Saved model")
+
         print()
 
 
