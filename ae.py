@@ -13,7 +13,7 @@ from config import *
 
 
 class AutoEncoder(nn.Module):
-    def __init__(self, m, c, image_dims = (3, 128, 128), starting_filters = 32) -> None:
+    def __init__(self, m, c, image_dims = (3, 128, 128), starting_filters = starting_filters) -> None:
         super().__init__()
         self.m, self.c = m, c
         self.latent_dims = (c, m, m)
@@ -67,7 +67,7 @@ def train_ae(epochs = epochs):
     print(f"Model training on m = {m}, c = {c}, image_dims = {image_dims}")
     model = AutoEncoder(m = m, c = c, image_dims = image_dims)
     print(f"Training on {sum([p.numel() for p in model.parameters()])} parameters")
-    
+
     loader = get_dataloader(dataset_type="custom", img_sz = img_sz, batch_size = batch_size)
 
     opt = torch.optim.Adam(model.parameters(), lr = lr)

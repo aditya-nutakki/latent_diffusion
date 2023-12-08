@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import os, numpy, json
 from modules import *
 from diffusion import DiffusionModel
-from ae import AutoEncoder
+from ae import AutoEncoder, train_ae
 
 import torchshow
 from time import time
@@ -21,12 +21,6 @@ from config import *
 3. Noise it and proceed as usual with your ddpm
 4. Reverse it back with the decoder. 
 
-doubts;
-    1. whats the loss function apart from Reconstruction loss ?
-    2. Lets ignore the D_phi model for now. 
-    3. 
-
-
 """
 
 
@@ -38,6 +32,10 @@ class LatentDiffusion(nn.Module):
         self.time_steps = time_steps
         self.autoencoder_model_path = autoencoder_model_path
         
+        if not os.path.exists(autoencoder_model_path):
+            print(f"Autoencoder model not found, training ...")
+            train_ae(epochs = 40)
+
         self.image_dims = image_dims
         self.latent_image_dims = diffusion_model_dims
 
@@ -49,11 +47,15 @@ class LatentDiffusion(nn.Module):
     def load_autoencoder_model(self):
         model_name = self.autoencoder_model_path.split("/")[-1]
         m, c, starting_filters, img_sz = model_name.split(".")[:-1][0].split("_")[1:]
+        m, c, starting_filters, img_sz = int(m), int(c), int(starting_filters), int(img_sz)
         model = AutoEncoder(m = m, c = c, starting_filters = starting_filters, image_dims = (self.image_dims[0], img_sz, img_sz))
+        model.load_state_dict(torch.load(self.autoencoder_model_path))
+        print("Loaded Autoencoder model")
         model.eval() # eval mode
 
+        # freeze model 
         for param in model.parameters():
-            param.requires_grad = False # freeze model 
+            param.requires_grad = False
 
         return model
 
@@ -65,7 +67,7 @@ class LatentDiffusion(nn.Module):
         with torch.no_grad():
             # x = torch.randn(num_samples, self.input_channels, self.img_size, self.img_size, device = device)
             x = torch.randn(num_samples, *self.latent_image_dims, device = device)
-            for i, t in enumerate(range(self.time_steps - 1, 0 , -1)):
+            for i, t in enumerate(range(self.time_steps - 1, 0, -1)):
                 alpha_t, alpha_t_hat, beta_t = self.diffusion_model.alphas[t], self.diffusion_model.alpha_hats[t], self.diffusion_model.betas[t]
                 # print(alpha_t, alpha_t_hat, beta_t)
                 t = torch.tensor(t, device = device).long()
@@ -74,6 +76,7 @@ class LatentDiffusion(nn.Module):
                     noise = torch.randn_like(x)
                     x = x + torch.sqrt(beta_t) * noise
         ftime = time()
+        x = self.autoencoder.decoder(x)
         torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
         print(f"Done denoising in {ftime - stime}s ")
 
@@ -89,34 +92,38 @@ class LatentDiffusion(nn.Module):
 
 
 def train_ldm():
-    ldm = LatentDiffusion(autoencoder_model_path = "/mnt/d/work/projects/latent_diffusion/models/autoencodertanh_16_128_32_128.pt", time_steps = time_steps)
-    c, h, w = diffusion_model_dims
-    assert h == w, f"height and width must be same, got {h} as height and {w} as width"
+    ldm = LatentDiffusion(autoencoder_model_path = autoencoder_model_path, time_steps = time_steps)
+    # c, h, w = img_sz
+    # assert h == w, f"height and width must be same, got {h} as height and {w} as width"
 
-    loader = get_dataloader(dataset_type="custom", img_sz = h, batch_size = batch_size)
+    assert os.path.exists(autoencoder_model_path), f"{autoencoder_model_path} not found !"
+
+    loader = get_dataloader(dataset_type="custom", img_sz = img_sz, batch_size = batch_size)
 
     opt = torch.optim.Adam(ldm.diffusion_model.model.parameters(), lr = lr) # optimizing only unet parameters
     criterion = nn.MSELoss(reduction="mean")
 
     ldm.autoencoder.to(device)
     ldm.diffusion_model.model.to(device)
-
+    print(f"Model training on m = {m}, c = {c}, image_dims = {image_dims}")
+    
     for ep in range(epochs):
         ldm.diffusion_model.model.train()
         print(f"Epoch {ep}:")
         losses = []
         stime = time()
         
-        # for i, x in enumerate(loader):
-        for i, (x, _) in enumerate(loader):
+        for i, x in enumerate(loader):
+        # for i, (x, _) in enumerate(loader):
 
             x = x.to(device)
             # ts = torch.randint(low = 1, high = ddpm.time_steps, size = (bs, ), device = device)            
             # x, target_noise = ddpm.add_noise(x, ts)
-            
+            # print(f"init x shape {x.shape}")
             z_noised, target_noise, ts = ldm(x)
+            # print(f"znoised shape {z_noised.shape}")
             # print(x.shape)
-            predicted_noise = ldm.diffusion_model.model(x, ts)
+            predicted_noise = ldm.diffusion_model.model(z_noised, ts)
             loss = criterion(target_noise, predicted_noise)
             
             opt.zero_grad()
@@ -138,6 +145,28 @@ def train_ldm():
 
 
 
+def test_noise():
+    ldm = LatentDiffusion(autoencoder_model_path = autoencoder_model_path, time_steps = time_steps)
+    loader = get_dataloader(dataset_type="custom", img_sz = img_sz, batch_size = batch_size)
+
+    ldm.autoencoder.to(device)
+    ldm.diffusion_model.model.to(device)
+
+    for i, x in enumerate(loader):
+        x = x.to(device)
+
+        z = ldm.autoencoder.encoder(x)
+        z_noised, target_noise, ts = ldm(x)
+        noised_recons_image = ldm.autoencoder.decoder(z_noised)
+        recons_image = ldm.autoencoder.decoder(z)
+        print(ts)
+        torchshow.save(x, f"init_image_{i}.jpeg")
+        torchshow.save(recons_image, f"recons_image_{i}.jpeg")
+        torchshow.save(noised_recons_image, f"noised_recons_image_{i}.jpeg")
+
+        if i == 5: break
+
 if __name__ == "__main__":
     train_ldm()
+    # test_noise()
 

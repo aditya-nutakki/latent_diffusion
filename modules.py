@@ -28,6 +28,7 @@ class conv_block(nn.Module):
 
         time_embedding = self.embedding(time).view(-1, self.embedding_dims, 1, 1)
         # print(f"time embed shape => {time_embedding.shape}")
+        # print(inputs.shape)
         x = self.conv1(inputs)
         x = self.gn1(x)
         # x = self.relu(x)
@@ -108,8 +109,10 @@ class UNet(nn.Module):
 
     def forward(self, inputs, t = None):
         # downsampling block
+        # print(inputs.shape)
         # print(embedding.shape)
         s1, p1 = self.e1(inputs, t)
+        # print(f"p1 shape {p1.shape}")
         # print(s1.shape, p1.shape)
         s2, p2 = self.e2(p1, t)
         # print(s2.shape, p2.shape)
@@ -141,7 +144,7 @@ class ResnetBlock(nn.Module):
     def __init__(self, in_c, out_c) -> None:
         super().__init__()
         self.conv = nn.Conv2d(in_channels = in_c, out_channels = out_c, kernel_size = 3, padding = 1)
-        self.norm = nn.GroupNorm(num_groups = 8, num_channels = out_c)
+        self.norm = nn.GroupNorm(num_groups = 4, num_channels = out_c)
 
         self.pool = nn.MaxPool2d((2,2))
         self.act = nn.ReLU()
@@ -171,22 +174,20 @@ class Encoder(nn.Module):
         for _block in self.blocks:
             x = _block(x)
 
-        # x = torch.tanh(x)
         return x
 
 
 class UpBlock(nn.Module):
-    def __init__(self, in_c, out_c, num_groups = 8, activation = "leaky_relu") -> None:
+    def __init__(self, in_c, out_c, num_groups = 4, activation = "leaky_relu") -> None:
         super().__init__()
         self.up = nn.ConvTranspose2d(in_c, out_c, kernel_size=2, stride=2, padding=0)
         self.conv = nn.Conv2d(out_c, out_c, kernel_size = 3, padding = 1)
         self.norm = nn.GroupNorm(num_groups = num_groups, num_channels = out_c)
-        # self.act = nn.Tanh() if activation == "tanh" else nn.LeakyReLU()
         self.act = nn.LeakyReLU() if activation == "leaky_relu" else nn.Tanh()
 
     def forward(self, x):
         x = self.up(x)
-        # x = self.conv(x)
+        x = self.conv(x)
         x = self.norm(x)
         # print(f"upblock: {x.shape}")
         return self.act(x)
