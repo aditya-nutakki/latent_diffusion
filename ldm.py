@@ -26,7 +26,7 @@ from config import *
 
 
 class LatentDiffusion(nn.Module):
-    def __init__(self, autoencoder_model_path, time_steps = 512) -> None:
+    def __init__(self, autoencoder_model_path = autoencoder_model_path, time_steps = time_steps) -> None:
         super().__init__()
 
         self.time_steps = time_steps
@@ -60,21 +60,22 @@ class LatentDiffusion(nn.Module):
         return model
 
 
-    def sample(self, ep, num_samples = batch_size):
+    def sample(self, ep = None, num_samples = batch_size, use_ddim_sampling = use_ddim_sampling):
         self.diffusion_model.model.eval()
         print(f"Sampling {num_samples} samples...")
         stime = time()
         with torch.no_grad():
-            # x = torch.randn(num_samples, self.input_channels, self.img_size, self.img_size, device = device)
+            
             x = torch.randn(num_samples, *self.latent_image_dims, device = device)
             for i, t in enumerate(range(self.time_steps - 1, 0, -1)):
                 alpha_t, alpha_t_hat, beta_t = self.diffusion_model.alphas[t], self.diffusion_model.alpha_hats[t], self.diffusion_model.betas[t]
-                # print(alpha_t, alpha_t_hat, beta_t)
                 t = torch.tensor(t, device = device).long()
                 x = (torch.sqrt(1/alpha_t))*(x - (1-alpha_t)/torch.sqrt(1 - alpha_t_hat) * self.diffusion_model.model(x, t))
+
                 if i > 1:
                     noise = torch.randn_like(x)
                     x = x + torch.sqrt(beta_t) * noise
+        
         ftime = time()
         x = self.autoencoder.decoder(x)
         torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
@@ -111,6 +112,7 @@ def train_ldm():
     ldm.autoencoder.to(device)
     ldm.diffusion_model.model.to(device)
     print(f"Model training on m = {m}, c = {c}, image_dims = {image_dims}")
+    global_losses = []
 
     for ep in range(epochs):
         ldm.diffusion_model.model.train()
@@ -133,10 +135,12 @@ def train_ldm():
             opt.step()
             
             losses.append(loss.item())
+            global_losses.append(loss.item())
 
             if i % 200 == 0:
                 print(f"Loss: {loss.item()}; step {i}; epoch {ep}")
 
+        plot_metrics(global_losses, title = "ldm_loss")
         ftime = time()
         print(f"Epoch trained in {ftime - stime}s; Avg loss => {sum(losses)/len(losses)}")
 

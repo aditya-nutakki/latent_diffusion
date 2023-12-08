@@ -123,7 +123,7 @@ def train_ddpm(time_steps = time_steps, epochs = epochs):
 
 
 if __name__ == "__main__":
-    time_steps = 512
+    # time_steps = 1000
     train_ddpm(time_steps = time_steps)
 
 

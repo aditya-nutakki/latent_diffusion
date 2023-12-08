@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from config import *
 
 """ Convolutional block:
     It follows a two 3x3 convolutional layer, each followed by a batch normalization and a relu activation.
@@ -19,7 +20,7 @@ class conv_block(nn.Module):
         self.gn2 = nn.GroupNorm(8, num_channels = out_c)
 
         self.embedding_dims = embedding_dims if embedding_dims else out_c
-        self.embedding = nn.Embedding(512, embedding_dim = self.embedding_dims) # temporarily say number of positions is 512 by default, change it later. Ideally it should be num_time_steps from the ddpm
+        self.embedding = nn.Embedding(time_steps, embedding_dim = self.embedding_dims) # temporarily say number of positions is 512 by default, change it later. Ideally it should be num_time_steps from the ddpm
         self.relu = nn.ReLU()
         self.act = nn.ReLU() if activation == "relu" else nn.SiLU()
 

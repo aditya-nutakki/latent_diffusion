@@ -76,6 +76,7 @@ def train_ae(epochs = epochs):
     os.makedirs(model_save_dir, exist_ok = True)
     model_name = f"autoencoder_{m}_{c}_{model.starting_filters}_{img_sz}.pt"
     
+    global_loss = []
     model.to(device)
     for ep in range(epochs):
         model.train()
@@ -97,12 +98,14 @@ def train_ae(epochs = epochs):
             opt.step()
 
             losses.append(loss.item())
+            global_loss.append(loss.item())
 
             if i % 200 == 0:
                 print(f"Loss: {loss.item()}; step {i}; epoch {ep}")
 
         ftime = time()
         print(f"Epoch trained in {ftime - stime}s; Avg loss => {sum(losses)/len(losses)}")
+        plot_metrics(global_loss, title = "autoencoder_loss_curve")
         eval(model, loader, ep)
 
         if (ep + 1) % 1 == 0:
@@ -112,7 +115,7 @@ def train_ae(epochs = epochs):
             print(f"model saved to {model_save_path}")
 
         print()
-
+        
 
 if __name__ == "__main__":
     train_ae()

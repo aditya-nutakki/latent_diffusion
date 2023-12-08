@@ -9,7 +9,10 @@ from torchvision.datasets.mnist import MNIST
 from torchvision.datasets.cifar import CIFAR10
 
 from config import *
+import matplotlib.pyplot as plt
 
+
+os.makedirs(metrics_save_dir, exist_ok = True)
 
 # custom normalizing function to get into range you want
 class NormalizeToRange(nn.Module):
@@ -101,6 +104,17 @@ def get_dataloader(dataset_type = "", batch_size = 8, img_sz = 128):
     print(f"Training on {len(ds)} samples; with batch size {batch_size}; image dims {image_dims} ...")
     return DataLoader(ds, batch_size = batch_size, shuffle = True, drop_last = True)
 
+
+def plot_metrics(losses, title, x_label = "steps", y_label = "loss"):
+    plt.plot(losses)
+    # Adding labels and title
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(title)
+
+    metrics_save_path = os.path.join(metrics_save_dir, f"{title}.jpeg")
+    plt.savefig(metrics_save_path)
+    plt.close()
 
 
 if __name__ == "__main__":
