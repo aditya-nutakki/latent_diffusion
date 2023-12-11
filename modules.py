@@ -139,6 +139,7 @@ class UNet(nn.Module):
         outputs = self.outputs(d4)
         # print(f"ddpm output {outputs.shape}")
         # print()
+        # print(f"output minmax: {torch.min(outputs)}, {torch.max(outputs)}")
         return outputs
 
 

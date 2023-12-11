@@ -16,9 +16,9 @@ epochs = 10000
 lr = 3e-4
 dataset_path = "/mnt/d/work/datasets/bikes/bikes_clean"
 
-model_save_dir = "./models_vae"
-img_save_dir = "./samples_vae/"
-metrics_save_dir = "./metrics_vae"
+model_save_dir = "./vae_results_m16c16/models_vae"
+img_save_dir = "./vae_results_m16c16/samples_vae/"
+metrics_save_dir = "./vae_results_m16c16/metrics_vae"
 
 use_ddim_sampling = False
 ddim_sampling_steps = 200 # applies only if 'use_ddim_sampling' is set to True

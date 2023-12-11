@@ -55,7 +55,7 @@ class LatentDiffusion(nn.Module):
         # load vae
         print("Loading VAE model")
         path = "/mnt/d/work/projects/vae/vaemodels_m16c16/vae_model_retraining_145.pth"
-        model = VAE(m = 16, c = 16)
+        model = VAE(m = m, c = c)
         model.load_state_dict(torch.load(path).state_dict())
         print("Loaded VAE model")
         model.eval() # eval mode
@@ -86,8 +86,10 @@ class LatentDiffusion(nn.Module):
         ftime = time()
         # x = self.autoencoder.decoder(x)
         print(f"sampling ... xshape: {x.shape}")
+        # print(print(torch.min(x), torch.max(x)))
         x = self.autoencoder.decode(x)
-        print(f"decoded shape: {x.shape}")
+        # print(torch.min(x), torch.max(x))
+        # print(f"decoded shape: {x.shape}")
         torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
         print(f"Done denoising in {ftime - stime}s ")
 
@@ -95,6 +97,7 @@ class LatentDiffusion(nn.Module):
     def save_model(self, ep):
         model_path = os.path.join(model_save_dir, f"ldm_{ep}.pt")
         torch.save(self.state_dict(), model_path)
+        print(f"saved model to {model_path}")
 
 
     def forward(self, x):
@@ -102,6 +105,7 @@ class LatentDiffusion(nn.Module):
         # z = self.autoencoder.encoder(x) # get latent space
         z, _, _ = self.autoencoder.encode(x) # get latent space
         # print(f"encoded shape: {z.shape}")
+        # print(f"autoencoder op minmax: {torch.min(z), torch.max(z)}")
         ts = torch.randint(low = 1, high = self.time_steps, size = (bs, ), device = device)
         z_noised, noise = self.diffusion_model.add_noise(z, ts)
         # print(f"ldm shapes: {z_noised.shape}; {noise.shape}; {ts.shape}")
@@ -115,12 +119,13 @@ def train_ldm(load_checkpoint = False):
     # assert h == w, f"height and width must be same, got {h} as height and {w} as width"
     
     if load_checkpoint:
-        ldm.load_state_dict(torch.load("./models_vae/ldm_5.pt"))
-        print("loaded ldm weights")
+        _model_path = "./vae_results_m16c16/models_vae/ldm_270.pt"
+        ldm.load_state_dict(torch.load(_model_path))
+        print(f"loaded ldm weights from {_model_path}")
 
     # assert os.path.exists(autoencoder_model_path), f"{autoencoder_model_path} not found !"
 
-    loader = get_dataloader(dataset_type="custom", img_sz = img_sz, batch_size = batch_size)
+    loader = get_dataloader(dataset_type="custom", img_sz = img_sz, batch_size = batch_size, limit = -1)
 
     opt = torch.optim.Adam(ldm.diffusion_model.model.parameters(), lr = lr) # optimizing only unet parameters
     criterion = nn.MSELoss(reduction="mean")
@@ -139,9 +144,11 @@ def train_ldm(load_checkpoint = False):
         for i, x in enumerate(loader):
         # for i, (x, _) in enumerate(loader):
             x = x.to(device)
+            # print(torch.min(x), torch.max(x))
             # print(f"init x shape {x.shape}")
             z_noised, target_noise, ts = ldm(x)
             # print(f"znoised shape {z_noised.shape}")
+            # print(torch.min(z_noised), torch.max(z_noised))
 
             predicted_noise = ldm.diffusion_model(z_noised, ts)
             loss = criterion(target_noise, predicted_noise)

@@ -81,7 +81,7 @@ class BikesDataset(Dataset):
         return clean_paths
 
 
-def get_dataloader(dataset_type = "", batch_size = 8, img_sz = 128):
+def get_dataloader(dataset_type = "", batch_size = 8, img_sz = 128, limit = -1):
 
     if dataset_type == "mnist":
         ds = MNIST(root="./datasets", download=True,
@@ -99,7 +99,7 @@ def get_dataloader(dataset_type = "", batch_size = 8, img_sz = 128):
                         NormalizeToRange(-1, 1)
                         ])) 
     else:
-        ds = BikesDataset(dataset_path, img_sz = img_sz)
+        ds = BikesDataset(dataset_path, img_sz = img_sz, limit = limit)
     
     print(f"Training on {len(ds)} samples; with batch size {batch_size}; image dims {image_dims} ...")
     return DataLoader(ds, batch_size = batch_size, shuffle = True, drop_last = True)
