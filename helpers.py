@@ -38,7 +38,7 @@ class BikesDataset(Dataset):
                 transforms.ToTensor(),
                 transforms.Resize((img_sz, img_sz)),
                 # transforms.Normalize((0.5, ), (0.5,))
-                NormalizeToRange(-1, 1)
+                # NormalizeToRange(-1, 1)
             ])
 
 

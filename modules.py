@@ -128,7 +128,7 @@ class UNet(nn.Module):
         # upsampling block
         d1 = self.d1(b, s4, t)
         # print(d1.shape)
-        # print(f"repeat {d1.shape}")
+        # # print(f"repeat {d1.shape}")
         d2 = self.d2(d1, s3, t)
         # print(d2.shape)
         d3 = self.d3(d2, s2, t)
@@ -137,7 +137,8 @@ class UNet(nn.Module):
         # print(d4.shape)
 
         outputs = self.outputs(d4)
-        # print(outputs.shape)
+        # print(f"ddpm output {outputs.shape}")
+        # print()
         return outputs
 
 

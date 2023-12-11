@@ -5,6 +5,7 @@ import os, numpy, json
 from modules import *
 from diffusion import DiffusionModel
 from ae import AutoEncoder, train_ae
+from vae import VAE
 
 import torchshow
 from time import time
@@ -32,25 +33,31 @@ class LatentDiffusion(nn.Module):
         self.time_steps = time_steps
         self.autoencoder_model_path = autoencoder_model_path
         
-        if not os.path.exists(autoencoder_model_path):
-            print(f"Autoencoder model not found, training ...")
-            train_ae(epochs = 40)
+        # if not os.path.exists(autoencoder_model_path):
+        #     print(f"Autoencoder model not found, training ...")
+        #     train_ae(epochs = 40)
 
         self.image_dims = image_dims
         self.latent_image_dims = diffusion_model_dims
 
-        self.diffusion_model = DiffusionModel(time_steps = self.time_steps, output_channels = c)
+        # self.diffusion_model = DiffusionModel(time_steps = self.time_steps, output_channels = c)
+        self.diffusion_model = DiffusionModel(time_steps = self.time_steps, image_dims = (16, 16, 16), output_channels = c)
         self.autoencoder = self.load_autoencoder_model()
         # call self.autoencoder.encoder and self.autoencoder.decoder individually to encode and decode
 
 
     def load_autoencoder_model(self):
-        model_name = self.autoencoder_model_path.split("/")[-1]
-        m, c, starting_filters, img_sz = model_name.split(".")[:-1][0].split("_")[1:]
-        m, c, starting_filters, img_sz = int(m), int(c), int(starting_filters), int(img_sz)
-        model = AutoEncoder(m = m, c = c, starting_filters = starting_filters, image_dims = (self.image_dims[0], img_sz, img_sz))
-        model.load_state_dict(torch.load(self.autoencoder_model_path))
-        print("Loaded Autoencoder model")
+        # model_name = self.autoencoder_model_path.split("/")[-1]
+        # m, c, starting_filters, img_sz = model_name.split(".")[:-1][0].split("_")[1:]
+        # m, c, starting_filters, img_sz = int(m), int(c), int(starting_filters), int(img_sz)
+        # model = AutoEncoder(m = m, c = c, starting_filters = starting_filters, image_dims = (self.image_dims[0], img_sz, img_sz))
+
+        # load vae
+        print("Loading VAE model")
+        path = "/mnt/d/work/projects/vae/vaemodels_m16c16/vae_model_retraining_145.pth"
+        model = VAE(m = 16, c = 16)
+        model.load_state_dict(torch.load(path).state_dict())
+        print("Loaded VAE model")
         model.eval() # eval mode
 
         # freeze model 
@@ -77,22 +84,27 @@ class LatentDiffusion(nn.Module):
                     x = x + torch.sqrt(beta_t) * noise
         
         ftime = time()
-        x = self.autoencoder.decoder(x)
+        # x = self.autoencoder.decoder(x)
+        print(f"sampling ... xshape: {x.shape}")
+        x = self.autoencoder.decode(x)
+        print(f"decoded shape: {x.shape}")
         torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
         print(f"Done denoising in {ftime - stime}s ")
 
 
     def save_model(self, ep):
-        model_path = os.path.join(model_save_dir, f"ldm_{ep + 200}.pt")
+        model_path = os.path.join(model_save_dir, f"ldm_{ep}.pt")
         torch.save(self.state_dict(), model_path)
 
 
     def forward(self, x):
         bs = x.shape[0]
-        z = self.autoencoder.encoder(x) # get latent space
+        # z = self.autoencoder.encoder(x) # get latent space
+        z, _, _ = self.autoencoder.encode(x) # get latent space
+        # print(f"encoded shape: {z.shape}")
         ts = torch.randint(low = 1, high = self.time_steps, size = (bs, ), device = device)
         z_noised, noise = self.diffusion_model.add_noise(z, ts)
-
+        # print(f"ldm shapes: {z_noised.shape}; {noise.shape}; {ts.shape}")
         return z_noised, noise, ts
 
 
@@ -103,10 +115,10 @@ def train_ldm(load_checkpoint = False):
     # assert h == w, f"height and width must be same, got {h} as height and {w} as width"
     
     if load_checkpoint:
-        ldm.load_state_dict(torch.load("./models/ldm_200.pt"))
+        ldm.load_state_dict(torch.load("./models_vae/ldm_5.pt"))
         print("loaded ldm weights")
 
-    assert os.path.exists(autoencoder_model_path), f"{autoencoder_model_path} not found !"
+    # assert os.path.exists(autoencoder_model_path), f"{autoencoder_model_path} not found !"
 
     loader = get_dataloader(dataset_type="custom", img_sz = img_sz, batch_size = batch_size)
 
@@ -131,7 +143,7 @@ def train_ldm(load_checkpoint = False):
             z_noised, target_noise, ts = ldm(x)
             # print(f"znoised shape {z_noised.shape}")
 
-            predicted_noise = ldm.diffusion_model.model(z_noised, ts)
+            predicted_noise = ldm.diffusion_model(z_noised, ts)
             loss = criterion(target_noise, predicted_noise)
             
             opt.zero_grad()
@@ -141,7 +153,7 @@ def train_ldm(load_checkpoint = False):
             losses.append(loss.item())
             global_losses.append(loss.item())
 
-            if i % 50 == 0:
+            if i % 100 == 0:
                 print(f"Loss: {loss.item()}; step {i}; epoch {ep}")
 
         plot_metrics(global_losses, title = "ldm_loss")
@@ -167,10 +179,18 @@ def test_noise():
     for i, x in enumerate(loader):
         x = x.to(device)
 
-        z = ldm.autoencoder.encoder(x)
+        # z = ldm.autoencoder.encoder(x)
+        # z_noised, target_noise, ts = ldm(x)
+        # noised_recons_image = ldm.autoencoder.decoder(z_noised)
+        # recons_image = ldm.autoencoder.decoder(z)
+
+        # vae 
+        z, _, _ = ldm.autoencoder.encode(x)
         z_noised, target_noise, ts = ldm(x)
-        noised_recons_image = ldm.autoencoder.decoder(z_noised)
-        recons_image = ldm.autoencoder.decoder(z)
+        noised_recons_image = ldm.autoencoder.decode(z_noised)
+        recons_image = ldm.autoencoder.decode(z)
+
+
         print(ts)
         torchshow.save(x, f"init_image_{i}.jpeg")
         torchshow.save(recons_image, f"recons_image_{i}.jpeg")

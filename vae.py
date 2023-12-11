@@ -4,27 +4,24 @@ from torch import nn
 from torchvision import transforms
 from helpers import *
 
-IMAGE_SIZE = 128
-# LATENT_DIM = 1024 # m4; c64
-
-m, c = 4, 128
-LATENT_DIM = m * m * c
-image_dim = 3 * IMAGE_SIZE * IMAGE_SIZE 
-
-print('IMAGE_SIZE', IMAGE_SIZE, 
-      'LATENT_DIM', LATENT_DIM, 
-      'image_dim', image_dim)
+import os
+import torch
+import torch.utils.data
+from torch import optim
+from torch.nn import functional as F
+from torchvision.utils import save_image
 
 
 class VAE(nn.Module):
-    def __init__(self):
+    def __init__(self, m ,c, image_size = 128):
         super(VAE, self).__init__()
 
         # hidden_dims = [32, 64, 128, 128, 256] # m16 c64
         # hidden_dims = [32, 64, 128, c] # (64, 8, 8)
-        # hidden_dims = [64, 128, c] # (16, 16, 16)
-        hidden_dims = [32, 64, 128, 256, c] # (64, 8, 8)
+        hidden_dims = [64, 128, c] # (16, 16, 16)
+        # hidden_dims = [32, 64, 128, 256, c] # (64, 8, 8)
         self.final_dim = hidden_dims[-1]
+        self.latent_dims = m*m*c
         in_channels = 3
         modules = []
 
@@ -40,11 +37,11 @@ class VAE(nn.Module):
             in_channels = h_dim
 
         self.encoder = nn.Sequential(*modules)
-        out = self.encoder(torch.rand(1, 3, IMAGE_SIZE, IMAGE_SIZE))
+        out = self.encoder(torch.rand(1, 3, image_size, image_size))
         print(f"out shape: {out.shape}")
         self.size = out.shape[2] # 4
-        self.fc_mu = nn.Linear(hidden_dims[-1] * self.size * self.size, LATENT_DIM)
-        self.fc_var = nn.Linear(hidden_dims[-1] * self.size * self.size, LATENT_DIM)
+        self.fc_mu = nn.Linear(hidden_dims[-1] * self.size * self.size, self.latent_dims)
+        self.fc_var = nn.Linear(hidden_dims[-1] * self.size * self.size, self.latent_dims)
 
         # Build Decoder
         modules = []
@@ -87,7 +84,9 @@ class VAE(nn.Module):
         mu = self.fc_mu(result)
         log_var = self.fc_var(result)
         # print(f"mu: {mu.shape}; logvar: {log_var.shape}")
-        return mu, log_var
+        z = self.reparameterize(mu, log_var)
+        z = z.view(-1, self.final_dim, self.size, self.size)
+        return z, mu, log_var
 
     def reparameterize(self, mu, log_var):
         std = torch.exp(0.5 * log_var)
@@ -97,9 +96,9 @@ class VAE(nn.Module):
     def decode(self, z):
         # print(f"init z shape: {z.shape}")
         # result = self.decoder_input(z) # commenting this out for now; please check again !!!!!
-        result = z.view(-1, self.final_dim, self.size, self.size)
+        
         # print(f"re viewed shape: {result.shape}")
-        result = self.decoder(result)
+        result = self.decoder(z)
         # print(f"decoded shape: {result.shape}")
         result = self.final_layer(result)
         # print(f"final shape: {result.shape}")
@@ -108,44 +107,9 @@ class VAE(nn.Module):
         return result
 
     def forward(self, x):
-        mu, log_var = self.encode(x)
-        z = self.reparameterize(mu, log_var)
+        z, mu, log_var = self.encode(x)
         return self.decode(z), mu, log_var
     
-
-
-##################################
-
-import os
-import torch
-import torch.utils.data
-from torch import optim
-from torch.nn import functional as F
-from torchvision.utils import save_image
-
-
-EPOCHS = 500
-BATCH_SIZE = 16
-device = "cuda"
-print('EPOCHS', EPOCHS, 'BATCH_SIZE', BATCH_SIZE, 'device', device)
-
-directory = f'./vaemodels_m{m}c{c}'
-os.makedirs(directory, exist_ok = True)
-print(directory)
-
-train_loader, test_loader = get_dataloader(batch_size=BATCH_SIZE), get_dataloader(batch_size=BATCH_SIZE)
-
-
-model_path = "/mnt/d/work/projects/vae/vaemodels_sigmoid/vae_model_retraining_58.pth"
-# ckpt = torch.load(model_path).state_dict()
-
-model = VAE().to(device)
-# model.load_state_dict(ckpt)
-
-print(sum([p.numel() for p in model.parameters()]))
-# print(f"model loaded from {model_path}")
-
-optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
@@ -203,10 +167,49 @@ def test(epoch):
                            f'{directory}/reconstruction_retraining_{str(continue_from + epoch)}.png', nrow=n)
             break
 
-continue_from = 0
+
 
 if __name__ == "__main__":
+
+        
+    IMAGE_SIZE = 128
+    # LATENT_DIM = 1024 # m4; c64
+    m, c = 4, 128
+    LATENT_DIM = m * m * c
+    image_dim = 3 * IMAGE_SIZE * IMAGE_SIZE 
+
+    print('IMAGE_SIZE', IMAGE_SIZE, 
+        'LATENT_DIM', LATENT_DIM, 
+        'image_dim', image_dim)
+
+
+
+    continue_from = 0
+    EPOCHS = 500
+    BATCH_SIZE = 16
+    device = "cuda"
+    print('EPOCHS', EPOCHS, 'BATCH_SIZE', BATCH_SIZE, 'device', device)
+
+    directory = f'./vaemodels_m{m}c{c}'
+    os.makedirs(directory, exist_ok = True)
+    print(directory)
+
+    train_loader, test_loader = get_dataloader(batch_size=BATCH_SIZE), get_dataloader(batch_size=BATCH_SIZE)
+
+
+    model_path = "/mnt/d/work/projects/vae/vaemodels_sigmoid/vae_model_retraining_58.pth"
+    # ckpt = torch.load(model_path).state_dict()
+
+    model = VAE().to(device)
+    # model.load_state_dict(ckpt)
+
+    print(sum([p.numel() for p in model.parameters()]))
+    # print(f"model loaded from {model_path}")
+
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
     print(f'epochs: {EPOCHS}')
+
 
     for epoch in range(1, EPOCHS + 1):
         train(epoch)

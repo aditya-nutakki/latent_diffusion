@@ -68,8 +68,8 @@ class DiffusionModel(nn.Module):
         return torch.stack(noised_examples), noise
         
 
-    def forward(self, x):
-        pass
+    def forward(self, x, t):
+        return self.model(x, t)
 
 
 
