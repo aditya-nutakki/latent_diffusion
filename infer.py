@@ -22,16 +22,16 @@ def _load_ldm_model():
     return ldm
 
 
-def infer(num_samples = 24):
+def infer(num_samples = 8):
     ldm = _load_ldm_model()
     print("Loaded LatentDiffusion model...")
 
     for i in range(4):
-        ldm.sample(ep = f"200_{i}", num_samples = num_samples)
+        ldm.sample(ep = f"m32c4_{i}", num_samples = num_samples)
 
 
 
 if __name__ == "__main__":
-    infer(num_samples = 24)
+    infer(num_samples = 8)
 
 

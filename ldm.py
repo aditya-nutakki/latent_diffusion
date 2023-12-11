@@ -83,7 +83,7 @@ class LatentDiffusion(nn.Module):
 
 
     def save_model(self, ep):
-        model_path = os.path.join(model_save_dir, f"ldm_{ep}.pt")
+        model_path = os.path.join(model_save_dir, f"ldm_{ep + 200}.pt")
         torch.save(self.state_dict(), model_path)
 
 
@@ -97,10 +97,14 @@ class LatentDiffusion(nn.Module):
 
 
 
-def train_ldm():
+def train_ldm(load_checkpoint = False):
     ldm = LatentDiffusion(autoencoder_model_path = autoencoder_model_path, time_steps = time_steps)
     # c, h, w = img_sz
     # assert h == w, f"height and width must be same, got {h} as height and {w} as width"
+    
+    if load_checkpoint:
+        ldm.load_state_dict(torch.load("./models/ldm_200.pt"))
+        print("loaded ldm weights")
 
     assert os.path.exists(autoencoder_model_path), f"{autoencoder_model_path} not found !"
 
@@ -137,14 +141,14 @@ def train_ldm():
             losses.append(loss.item())
             global_losses.append(loss.item())
 
-            if i % 200 == 0:
+            if i % 50 == 0:
                 print(f"Loss: {loss.item()}; step {i}; epoch {ep}")
 
         plot_metrics(global_losses, title = "ldm_loss")
         ftime = time()
         print(f"Epoch trained in {ftime - stime}s; Avg loss => {sum(losses)/len(losses)}")
 
-        if (ep) % 10 == 0:
+        if (ep) % 5 == 0:
             ldm.sample(ep)
             ldm.save_model(ep)
             print("Saved model")
@@ -175,6 +179,6 @@ def test_noise():
         if i == 5: break
 
 if __name__ == "__main__":
-    train_ldm()
+    train_ldm(load_checkpoint = True)
     # test_noise()
 
