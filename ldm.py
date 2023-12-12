@@ -13,7 +13,7 @@ from time import time
 from helpers import *
 from config import *
 
-
+from sys import exit
 
 """
 
@@ -41,7 +41,7 @@ class LatentDiffusion(nn.Module):
         self.latent_image_dims = diffusion_model_dims
 
         # self.diffusion_model = DiffusionModel(time_steps = self.time_steps, output_channels = c)
-        self.diffusion_model = DiffusionModel(time_steps = self.time_steps, image_dims = (16, 16, 16), output_channels = c)
+        self.diffusion_model = DiffusionModel(time_steps = self.time_steps, image_dims = diffusion_model_dims, output_channels = c)
         self.autoencoder = self.load_autoencoder_model()
         # call self.autoencoder.encoder and self.autoencoder.decoder individually to encode and decode
 
@@ -55,6 +55,7 @@ class LatentDiffusion(nn.Module):
         # load vae
         print("Loading VAE model")
         path = "/mnt/d/work/projects/vae/vaemodels_m16c16/vae_model_retraining_145.pth"
+        # path = "/mnt/d/work/projects/vae/vaemodels_m16c128/vae_model_retraining_10.pth"
         model = VAE(m = m, c = c)
         model.load_state_dict(torch.load(path).state_dict())
         print("Loaded VAE model")
@@ -69,6 +70,7 @@ class LatentDiffusion(nn.Module):
 
     def sample(self, ep = None, num_samples = batch_size, use_ddim_sampling = use_ddim_sampling):
         self.diffusion_model.model.eval()
+        num_samples = 32
         print(f"Sampling {num_samples} samples...")
         stime = time()
         with torch.no_grad():
@@ -82,14 +84,17 @@ class LatentDiffusion(nn.Module):
                 if i > 1:
                     noise = torch.randn_like(x)
                     x = x + torch.sqrt(beta_t) * noise
-        
+
+                # print(f"sampling denoised within loop minmax: {torch.min(x), torch.max(x)}")
+            
+            # print()
         ftime = time()
         # x = self.autoencoder.decoder(x)
         print(f"sampling ... xshape: {x.shape}")
-        # print(print(torch.min(x), torch.max(x)))
+        # print(f"sampling denoised minmax: {torch.min(x), torch.max(x)}")
         x = self.autoencoder.decode(x)
-        # print(torch.min(x), torch.max(x))
-        # print(f"decoded shape: {x.shape}")
+        # print(f"decoded x minmax: {torch.min(x), torch.max(x)}")
+        print(f"decoded shape: {x.shape}")
         torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
         print(f"Done denoising in {ftime - stime}s ")
 
@@ -113,13 +118,14 @@ class LatentDiffusion(nn.Module):
 
 
 
-def train_ldm(load_checkpoint = False):
+def train_ldm(load_checkpoint = False, continue_from = 0):
     ldm = LatentDiffusion(autoencoder_model_path = autoencoder_model_path, time_steps = time_steps)
     # c, h, w = img_sz
     # assert h == w, f"height and width must be same, got {h} as height and {w} as width"
     
     if load_checkpoint:
         _model_path = "./vae_results_m16c16/models_vae/ldm_270.pt"
+        # _model_path = "./vaemodels_m16c128/models/ldm_46.pt"
         ldm.load_state_dict(torch.load(_model_path))
         print(f"loaded ldm weights from {_model_path}")
 
@@ -137,7 +143,7 @@ def train_ldm(load_checkpoint = False):
 
     for ep in range(epochs):
         ldm.diffusion_model.model.train()
-        print(f"Epoch {ep}:")
+        print(f"Epoch {ep + continue_from}:")
         losses = []
         stime = time()
         
@@ -151,6 +157,8 @@ def train_ldm(load_checkpoint = False):
             # print(torch.min(z_noised), torch.max(z_noised))
 
             predicted_noise = ldm.diffusion_model(z_noised, ts)
+            # print(f"unet output shape: {predicted_noise.shape}")
+            # print(f"unet minmax: {torch.min(predicted_noise), torch.max(predicted_noise)}")
             loss = criterion(target_noise, predicted_noise)
             
             opt.zero_grad()
@@ -161,15 +169,15 @@ def train_ldm(load_checkpoint = False):
             global_losses.append(loss.item())
 
             if i % 100 == 0:
-                print(f"Loss: {loss.item()}; step {i}; epoch {ep}")
+                print(f"Loss: {loss.item()}; step {i}; epoch {ep + continue_from}")
 
         plot_metrics(global_losses, title = "ldm_loss")
         ftime = time()
         print(f"Epoch trained in {ftime - stime}s; Avg loss => {sum(losses)/len(losses)}")
 
         if (ep) % 5 == 0:
-            ldm.sample(ep)
-            ldm.save_model(ep)
+            ldm.sample(ep + continue_from)
+            ldm.save_model(ep + continue_from)
             print("Saved model")
 
         print()
@@ -206,6 +214,6 @@ def test_noise():
         if i == 5: break
 
 if __name__ == "__main__":
-    train_ldm(load_checkpoint = True)
+    train_ldm(load_checkpoint = False)
     # test_noise()
 

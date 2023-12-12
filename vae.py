@@ -18,6 +18,7 @@ class VAE(nn.Module):
 
         # hidden_dims = [32, 64, 128, 128, 256] # m16 c64
         # hidden_dims = [32, 64, 128, c] # (64, 8, 8)
+        # hidden_dims = [64, 128, c * 2] # (16, 16, 16)
         hidden_dims = [64, 128, c] # (16, 16, 16)
         # hidden_dims = [32, 64, 128, 256, c] # (64, 8, 8)
         self.final_dim = hidden_dims[-1]
@@ -46,6 +47,7 @@ class VAE(nn.Module):
         # Build Decoder
         modules = []
         # self.decoder_input = nn.Linear(LATENT_DIM, hidden_dims[-1] * self.size * self.size)
+        # self.decoder_input = nn.ConvTranspose2d(c, c*2, stride = 1, kernel_size = 1) # double the number of channels without changing w, h 
         hidden_dims.reverse()
 
         for i in range(len(hidden_dims) - 1):
@@ -81,8 +83,12 @@ class VAE(nn.Module):
         result = self.encoder(x)
         # print(f"encoded shape: {result.shape}")
         result = torch.flatten(result, start_dim=1)
+        
+        # mu, log_var = torch.chunk(result, 2, dim = 1) # directly splitting the last layer into two because linear mapping would be an expensive operation
+        
         mu = self.fc_mu(result)
         log_var = self.fc_var(result)
+        
         # print(f"mu: {mu.shape}; logvar: {log_var.shape}")
         z = self.reparameterize(mu, log_var)
         z = z.view(-1, self.final_dim, self.size, self.size)
@@ -95,7 +101,7 @@ class VAE(nn.Module):
 
     def decode(self, z):
         # print(f"init z shape: {z.shape}")
-        # result = self.decoder_input(z) # commenting this out for now; please check again !!!!!
+        # result = self.decoder_input(z) # uncommenting this out for now; use it only if you're chunking the final conv layer in the encoder
         
         # print(f"re viewed shape: {result.shape}")
         result = self.decoder(z)
