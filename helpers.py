@@ -10,6 +10,7 @@ from torchvision.datasets.cifar import CIFAR10
 
 from config import *
 import matplotlib.pyplot as plt
+from random import uniform
 
 
 os.makedirs(metrics_save_dir, exist_ok = True)
@@ -26,6 +27,21 @@ class NormalizeToRange(nn.Module):
         return (self.max_val - self.min_val) * ((images - 0) / (1)) + self.min_val
     
 
+class AddGaussianNoise(object):
+    def __init__(self, mean=0., std=1., p = 0.2):
+        self.std = std
+        self.mean = mean
+        self.p = p
+
+    def __call__(self, tensor):
+        if uniform(0, 1) < self.p:
+            return tensor + torch.randn(tensor.size()) * self.std + self.mean
+        else:
+            return tensor
+    
+
+augmentations_to_use = transforms.Compose([AddGaussianNoise(std = uniform(0.01, 0.1), p = 1)])
+
 
 class BikesDataset(Dataset):
     def __init__(self, dataset_path, limit = -1, _transforms = None, img_sz = 128) -> None:
@@ -37,6 +53,9 @@ class BikesDataset(Dataset):
             self.transforms = transforms.Compose([
                 transforms.ToTensor(),
                 transforms.Resize((img_sz, img_sz)),
+                transforms.RandomHorizontalFlip(p = 0.5),
+                transforms.ColorJitter([0.5, 1]),
+                transforms.RandomAdjustSharpness(1.1, p = 0.4)
                 # transforms.Normalize((0.5, ), (0.5,))
                 # NormalizeToRange(-1, 1)
             ])
@@ -119,4 +138,3 @@ def plot_metrics(losses, title, x_label = "steps", y_label = "loss"):
 
 if __name__ == "__main__":
     ds = BikesDataset("/mnt/d/work/datasets/bikes/combined", img_sz=128)
-

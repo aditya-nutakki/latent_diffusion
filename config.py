@@ -4,6 +4,8 @@ import os
 img_sz = 128
 # m, c = 16, 128
 m, c = 16, 16
+# m, c = 16, 4 # use hidden_dims = [64, 128, c] for all m = 16 and any c
+# m, c = 16, 8
 image_dims = (3, img_sz, img_sz) # c, h, w
 starting_filters = 64
 # diffusion_model_dims = (3, 32, 32) # c, m, m

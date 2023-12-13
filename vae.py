@@ -13,16 +13,17 @@ from torchvision.utils import save_image
 
 
 class VAE(nn.Module):
-    def __init__(self, m ,c, image_size = 128):
+    def __init__(self, m ,c, image_size = 128, hidden_dims = None):
         super(VAE, self).__init__()
 
         # hidden_dims = [32, 64, 128, 128, 256] # m16 c64
         # hidden_dims = [32, 64, 128, c] # (64, 8, 8)
         # hidden_dims = [64, 128, c * 2] # (16, 16, 16)
-        hidden_dims = [64, 128, c] # (16, 16, 16)
+        # hidden_dims = [128, 256, c] # (4, 32, 32)
         # hidden_dims = [32, 64, 128, 256, c] # (64, 8, 8)
+        hidden_dims = [64, 128, c] # (c, 16, 16)
         self.final_dim = hidden_dims[-1]
-        self.latent_dims = m*m*c
+        self.latent_dims = m * m * c
         in_channels = 3
         modules = []
 
@@ -114,6 +115,7 @@ class VAE(nn.Module):
 
     def forward(self, x):
         z, mu, log_var = self.encode(x)
+        # print(f"latent dim shape {z.shape}")
         return self.decode(z), mu, log_var
     
 
@@ -123,7 +125,8 @@ def loss_function(recon_x, x, mu, log_var):
     MSE =F.mse_loss(recon_x, x)
     KLD = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp())
     kld_weight = 0.00025
-    loss = MSE + kld_weight * KLD  
+    loss = MSE + kld_weight * KLD
+    # print(MSE, kld_weight * KLD) 
     return loss
 
 
@@ -133,16 +136,22 @@ def train(epoch):
     # for batch_idx, (data, _) in enumerate(train_loader):
     for batch_idx, data in enumerate(train_loader):
         torch.cuda.empty_cache()
-        data = data.to(device)
+        real_data = data.clone().to(device)
+        data = augmentations_to_use(data).to(device)
         optimizer.zero_grad()
         recon_batch, mu, log_var = model(data)
 
         # print(torch.min(data), torch.max(data))
         # print(torch.min(recon_batch), torch.max(recon_batch))
         # break
-
+        # torchshow.save(real_data, f"./real_data.jpeg")
+        # torchshow.save(data, f"./aug_data.jpeg")
+        # exit()
         log_var = torch.clamp_(log_var, -5, 5)
-        loss = loss_function(recon_batch, data, mu, log_var)
+        # loss = loss_function(recon_batch, data, mu, log_var)
+        loss = loss_function(recon_batch, real_data, mu, log_var)
+        # print(loss.item())
+        # print()
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -180,7 +189,6 @@ if __name__ == "__main__":
         
     IMAGE_SIZE = 128
     # LATENT_DIM = 1024 # m4; c64
-    m, c = 4, 128
     LATENT_DIM = m * m * c
     image_dim = 3 * IMAGE_SIZE * IMAGE_SIZE 
 
@@ -190,7 +198,7 @@ if __name__ == "__main__":
 
 
 
-    continue_from = 0
+    continue_from = 40
     EPOCHS = 500
     BATCH_SIZE = 16
     device = "cuda"
@@ -203,10 +211,10 @@ if __name__ == "__main__":
     train_loader, test_loader = get_dataloader(batch_size=BATCH_SIZE), get_dataloader(batch_size=BATCH_SIZE)
 
 
-    model_path = "/mnt/d/work/projects/vae/vaemodels_sigmoid/vae_model_retraining_58.pth"
+    # model_path = "/mnt/d/work/projects/latent_diffusion/vaemodels_m16c4/vaemodel_40.pt"
     # ckpt = torch.load(model_path).state_dict()
 
-    model = VAE().to(device)
+    model = VAE(m = m, c = c).to(device)
     # model.load_state_dict(ckpt)
 
     print(sum([p.numel() for p in model.parameters()]))
@@ -219,10 +227,10 @@ if __name__ == "__main__":
 
     for epoch in range(1, EPOCHS + 1):
         train(epoch)
-        torch.save(model, f'{directory}/vae_model_retraining_{continue_from + epoch}.pth')
+        torch.save(model, f'{directory}/vaemodel_{continue_from + epoch}.pt')
         test(epoch)
         with torch.no_grad():
-            sample = torch.randn(64, LATENT_DIM).to(device)
+            sample = torch.randn(64, *(c, m, m)).to(device)
             sample = model.decode(sample).cpu()
             save_image(sample.view(64, 3, IMAGE_SIZE, IMAGE_SIZE),
                        f'{directory}/sample_retraining_{str(continue_from + epoch)}.png')

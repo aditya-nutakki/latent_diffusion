@@ -9,6 +9,7 @@ from vae import VAE
 
 import torchshow
 from time import time
+from random import uniform
 
 from helpers import *
 from config import *
@@ -68,10 +69,47 @@ class LatentDiffusion(nn.Module):
         return model
 
 
-    def sample(self, ep = None, num_samples = batch_size, use_ddim_sampling = use_ddim_sampling):
+    def ddim_sample(self, ep, sample_steps, num_samples = 16, eta = 0.0):
+        assert sample_steps < self.time_steps, f"sampling steps should be lesser than number of time steps"
+        
         self.diffusion_model.model.eval()
-        num_samples = 32
-        print(f"Sampling {num_samples} samples...")
+        print(f"sampling {num_samples} examples with ddim... ")
+        with torch.no_grad():
+            # x = torch.randn(num_samples, *self.latent_image_dims, device = device)
+            times = torch.linspace(1, self.time_steps - 1, sample_steps).to(torch.long)
+            times = list(reversed(times.int().tolist()))
+            time_pairs = list(zip(times[:-1], times[1:]))
+            print(f"time pairs: {time_pairs}")
+            x = torch.randn(num_samples, *self.latent_image_dims, device = device)
+            stime = time()
+            for t, t_minus_one in time_pairs:
+                noise = torch.randn(num_samples, *self.latent_image_dims, device = device)
+                alpha_t, alpha_t_minus_one = self.diffusion_model.alpha_hats[t], self.diffusion_model.alpha_hats[t_minus_one]
+                
+                t = torch.tensor(t, device = device).long()
+                pred_noise = self.diffusion_model(x, t)
+
+                sigma = eta * (((1 - alpha_t) * (1 - alpha_t_minus_one)) / ((1 - alpha_t_minus_one) * alpha_t_minus_one)).sqrt()
+                print(alpha_t, alpha_t_minus_one, sigma)
+                k = torch.sqrt(1 - alpha_t_minus_one - sigma**2)
+                pred_x0 = torch.sqrt(alpha_t_minus_one) * (x - torch.sqrt(1 - alpha_t)*pred_noise)/torch.sqrt(alpha_t)
+
+                x = pred_x0 + k * pred_noise + sigma * noise
+            
+            ftime = time()
+            # print(f"sampling denoised minmax: {torch.min(x), torch.max(x)}")
+            x = self.autoencoder.decode(x)
+            # print(f"decoded x minmax: {torch.min(x), torch.max(x)}")
+            print(f"decoded shape: {x.shape}")
+            torchshow.save(x, os.path.join("./", f"latent_ddim_sample_{ep}.jpeg"))
+            print(f"Done denoising in {ftime - stime}s ")
+            
+
+
+
+    def sample(self, ep = None, num_samples = 16):
+        self.diffusion_model.model.eval()
+        print(f"Sampling {num_samples} examples...")
         stime = time()
         with torch.no_grad():
             
@@ -95,7 +133,8 @@ class LatentDiffusion(nn.Module):
         x = self.autoencoder.decode(x)
         # print(f"decoded x minmax: {torch.min(x), torch.max(x)}")
         print(f"decoded shape: {x.shape}")
-        torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
+        # torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
+        torchshow.save(x, os.path.join("./", f"latent_sample_{ep}.jpeg"))
         print(f"Done denoising in {ftime - stime}s ")
 
 
@@ -124,7 +163,8 @@ def train_ldm(load_checkpoint = False, continue_from = 0):
     # assert h == w, f"height and width must be same, got {h} as height and {w} as width"
     
     if load_checkpoint:
-        _model_path = "./vae_results_m16c16/models_vae/ldm_270.pt"
+        # _model_path = f"./vaemodels_m{c}c{c}t{time_steps}/models/ldm_221.pt"
+        _model_path = os.path.join(model_save_dir, f"ldm_650.pt")
         # _model_path = "./vaemodels_m16c128/models/ldm_46.pt"
         ldm.load_state_dict(torch.load(_model_path))
         print(f"loaded ldm weights from {_model_path}")
@@ -138,7 +178,7 @@ def train_ldm(load_checkpoint = False, continue_from = 0):
 
     ldm.autoencoder.to(device)
     ldm.diffusion_model.model.to(device)
-    print(f"Model training on m = {m}, c = {c}, image_dims = {image_dims}")
+    print(f"Model training on m = {m}, c = {c}, image_dims = {image_dims}, t = {time_steps}")
     global_losses = []
 
     for ep in range(epochs):
@@ -175,7 +215,7 @@ def train_ldm(load_checkpoint = False, continue_from = 0):
         ftime = time()
         print(f"Epoch trained in {ftime - stime}s; Avg loss => {sum(losses)/len(losses)}")
 
-        if (ep) % 5 == 0:
+        if (ep + continue_from) % 5 == 0:
             ldm.sample(ep + continue_from)
             ldm.save_model(ep + continue_from)
             print("Saved model")
@@ -214,6 +254,6 @@ def test_noise():
         if i == 5: break
 
 if __name__ == "__main__":
-    train_ldm(load_checkpoint = False)
+    train_ldm(load_checkpoint = True)
     # test_noise()
 
