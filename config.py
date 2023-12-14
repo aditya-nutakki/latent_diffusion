@@ -3,9 +3,9 @@ import os
 
 img_sz = 128
 # m, c = 16, 128
-m, c = 16, 16
-# m, c = 16, 4 # use hidden_dims = [64, 128, c] for all m = 16 and any c
-# m, c = 16, 8
+m, c = 16, 4
+# m, c = 16, 8 # use hidden_dims = [64, 128, c] for all m = 16 and any c
+# m, c = 16, 16
 image_dims = (3, img_sz, img_sz) # c, h, w
 starting_filters = 64
 # diffusion_model_dims = (3, 32, 32) # c, m, m
@@ -16,7 +16,7 @@ autoencoder_model_path = f"/mnt/d/work/projects/latent_diffusion/models/autoenco
 device = "cuda"
 batch_size = 16
 epochs = 10000
-lr = 6e-4
+lr = 1e-3
 dataset_path = "/mnt/d/work/datasets/bikes/bikes_clean"
 
 base_path = f"./vaemodels_m{m}c{c}t{time_steps}"

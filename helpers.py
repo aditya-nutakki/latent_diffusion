@@ -124,15 +124,15 @@ def get_dataloader(dataset_type = "", batch_size = 8, img_sz = 128, limit = -1):
     return DataLoader(ds, batch_size = batch_size, shuffle = True, drop_last = True)
 
 
-def plot_metrics(losses, title, x_label = "steps", y_label = "loss"):
+def plot_metrics(losses, title, save_path = None, x_label = "steps", y_label = "loss"):
     plt.plot(losses)
     # Adding labels and title
     plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.title(title)
-
-    metrics_save_path = os.path.join(metrics_save_dir, f"{title}.jpeg")
-    plt.savefig(metrics_save_path)
+    if save_path is None:
+        save_path = os.path.join(metrics_save_dir, f"{title}.jpeg")
+    plt.savefig(save_path)
     plt.close()
 
 

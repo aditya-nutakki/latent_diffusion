@@ -126,9 +126,9 @@ def loss_function(recon_x, x, mu, log_var):
     KLD = -0.5 * torch.mean(1 + log_var - mu.pow(2) - log_var.exp())
     kld_weight = 0.00025
     loss = MSE + kld_weight * KLD
-    # print(MSE, kld_weight * KLD) 
     return loss
 
+losses = []
 
 def train(epoch):
     model.train()
@@ -150,7 +150,7 @@ def train(epoch):
         log_var = torch.clamp_(log_var, -5, 5)
         # loss = loss_function(recon_batch, data, mu, log_var)
         loss = loss_function(recon_batch, real_data, mu, log_var)
-        # print(loss.item())
+        losses.append(loss.item())
         # print()
         loss.backward()
         train_loss += loss.item()
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
 
 
-    continue_from = 40
+    continue_from = 0
     EPOCHS = 500
     BATCH_SIZE = 16
     device = "cuda"
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     print(directory)
 
     train_loader, test_loader = get_dataloader(batch_size=BATCH_SIZE), get_dataloader(batch_size=BATCH_SIZE)
-
+    
 
     # model_path = "/mnt/d/work/projects/latent_diffusion/vaemodels_m16c4/vaemodel_40.pt"
     # ckpt = torch.load(model_path).state_dict()
@@ -228,6 +228,7 @@ if __name__ == "__main__":
     for epoch in range(1, EPOCHS + 1):
         train(epoch)
         torch.save(model, f'{directory}/vaemodel_{continue_from + epoch}.pt')
+        plot_metrics(losses, title = f"vae_loss_m{c}c{c}", save_path = os.path.join(directory, f"vae_loss_m{c}c{c}.jpeg"))
         test(epoch)
         with torch.no_grad():
             sample = torch.randn(64, *(c, m, m)).to(device)
