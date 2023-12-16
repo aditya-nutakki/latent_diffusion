@@ -89,8 +89,9 @@ class UNet(nn.Module):
         self.input_channels = input_channels
         self.output_channels = output_channels
         self.down_factor = down_factor
-    
+
         self.num_steps = num_steps
+        print(f"UNET with {self.num_steps}")
         # self.embedding = nn.Embedding(self.num_steps, 512)
 
         self.e1 = encoder_block(self.input_channels, 64)

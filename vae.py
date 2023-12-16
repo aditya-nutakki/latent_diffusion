@@ -101,21 +101,15 @@ class VAE(nn.Module):
         return eps * std + mu
 
     def decode(self, z):
-        # print(f"init z shape: {z.shape}")
         # result = self.decoder_input(z) # uncommenting this out for now; use it only if you're chunking the final conv layer in the encoder
         
-        # print(f"re viewed shape: {result.shape}")
         result = self.decoder(z)
-        # print(f"decoded shape: {result.shape}")
         result = self.final_layer(result)
-        # print(f"final shape: {result.shape}")
-        # result = torch.flatten(result, start_dim=1)
         result = torch.nan_to_num(result)
         return result
 
     def forward(self, x):
         z, mu, log_var = self.encode(x)
-        # print(f"latent dim shape {z.shape}")
         return self.decode(z), mu, log_var
     
 
@@ -141,17 +135,9 @@ def train(epoch):
         optimizer.zero_grad()
         recon_batch, mu, log_var = model(data)
 
-        # print(torch.min(data), torch.max(data))
-        # print(torch.min(recon_batch), torch.max(recon_batch))
-        # break
-        # torchshow.save(real_data, f"./real_data.jpeg")
-        # torchshow.save(data, f"./aug_data.jpeg")
-        # exit()
         log_var = torch.clamp_(log_var, -5, 5)
-        # loss = loss_function(recon_batch, data, mu, log_var)
         loss = loss_function(recon_batch, real_data, mu, log_var)
         losses.append(loss.item())
-        # print()
         loss.backward()
         train_loss += loss.item()
         optimizer.step()
@@ -169,7 +155,6 @@ def test(epoch):
     model.eval()
     test_loss = 0
     with torch.no_grad():
-        # for i, (data, _) in enumerate(test_loader):
         for i, data in enumerate(test_loader):
             data = data.to(device)
             recon_batch, mu, log_var = model(data)
@@ -188,7 +173,6 @@ if __name__ == "__main__":
 
         
     IMAGE_SIZE = 128
-    # LATENT_DIM = 1024 # m4; c64
     LATENT_DIM = m * m * c
     image_dim = 3 * IMAGE_SIZE * IMAGE_SIZE 
 
@@ -228,7 +212,7 @@ if __name__ == "__main__":
     for epoch in range(1, EPOCHS + 1):
         train(epoch)
         torch.save(model, f'{directory}/vaemodel_{continue_from + epoch}.pt')
-        plot_metrics(losses, title = f"vae_loss_m{c}c{c}", save_path = os.path.join(directory, f"vae_loss_m{c}c{c}.jpeg"))
+        plot_metrics(losses, title = f"vae_loss_m{m}c{c}", save_path = os.path.join(directory, f"vae_loss_m{c}c{c}.jpeg"))
         test(epoch)
         with torch.no_grad():
             sample = torch.randn(64, *(c, m, m)).to(device)

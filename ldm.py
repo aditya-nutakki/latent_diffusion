@@ -28,47 +28,30 @@ from sys import exit
 
 
 class LatentDiffusion(nn.Module):
-    def __init__(self, autoencoder_model_path = autoencoder_model_path, time_steps = time_steps) -> None:
+    def __init__(self, m, c, inference_mode = False, autoencoder_model_path = autoencoder_model_path, time_steps = time_steps) -> None:
         super().__init__()
 
         self.time_steps = time_steps
+        self.m, self.c = m, c
         self.autoencoder_model_path = autoencoder_model_path
-        
-        # if not os.path.exists(autoencoder_model_path):
-        #     print(f"Autoencoder model not found, training ...")
-        #     train_ae(epochs = 40)
-
+        self.inference_mode = inference_mode
         self.image_dims = image_dims
         self.latent_image_dims = diffusion_model_dims
 
-        # self.diffusion_model = DiffusionModel(time_steps = self.time_steps, output_channels = c)
         self.diffusion_model = DiffusionModel(time_steps = self.time_steps, image_dims = diffusion_model_dims, output_channels = c)
         self.autoencoder = self.load_autoencoder_model()
-        # self.autoencoder = VAE(m = m, c = c)
-        # for param in self.autoencoder.parameters():
-        #     param.requires_grad = False
-        # self.autoencoder.eval()
-        # call self.autoencoder.encoder and self.autoencoder.decoder individually to encode and decode
     
 
     def load_autoencoder_model(self):
-        # model_name = self.autoencoder_model_path.split("/")[-1]
-        # m, c, starting_filters, img_sz = model_name.split(".")[:-1][0].split("_")[1:]
-        # m, c, starting_filters, img_sz = int(m), int(c), int(starting_filters), int(img_sz)
-        # model = AutoEncoder(m = m, c = c, starting_filters = starting_filters, image_dims = (self.image_dims[0], img_sz, img_sz))
-
-        # load vae
-        print("Loading VAE model")
-        # path = "/mnt/d/work/projects/vae/vaemodels_m16c16/vae_model_retraining_145.pth" # m, c = 16, 16
-        # path = "/mnt/d/work/projects/vae/vaemodels_m16c128/vae_model_retraining_10.pth" # m, c = 16, 128 (conv filter method)
-        # path = f"./vaemodels_m{m}c{c}/vaemodel_66.pt" # m, c = 16, 8
-        path = f"./vaemodels_m{m}c{c}/vaemodel_46.pt" # m, c = 16, 4
-        # path = f"./vaemodels_m{m}c{c}/vaemodel_20.pt" # m, c = 16, 16 (new)
-        model = VAE(m = m, c = c)
-        model.load_state_dict(torch.load(path).state_dict())
-        print(f"Loaded VAE model from {path}")
+        model = VAE(m = self.m, c = self.c)
+        
+        if self.inference_mode:
+            # load vae
+            path = f"./vaemodels_m{m}c{c}/vaemodel_46.pt" # m, c = 16, 4
+            model.load_state_dict(torch.load(path).state_dict())
+            print(f"Loaded VAE model from {path}")
+        
         model.eval() # eval mode
-
         # freeze model 
         for param in model.parameters():
             param.requires_grad = False
@@ -82,11 +65,9 @@ class LatentDiffusion(nn.Module):
         self.diffusion_model.model.eval()
         print(f"sampling {num_samples} examples with ddim... ")
         with torch.no_grad():
-            # x = torch.randn(num_samples, *self.latent_image_dims, device = device)
             times = torch.linspace(1, self.time_steps - 1, sample_steps).to(torch.long)
             times = list(reversed(times.int().tolist()))
             time_pairs = list(zip(times[:-1], times[1:]))
-            # print(f"time pairs: {time_pairs}")
             x = torch.randn(num_samples, *self.latent_image_dims, device = device)
             stime = time()
             for t, t_minus_one in time_pairs:
@@ -97,23 +78,18 @@ class LatentDiffusion(nn.Module):
                 pred_noise = self.diffusion_model(x, t)
 
                 sigma = eta * torch.sqrt((1-alpha_t_minus_one)/(1 - alpha_t) * (1 - (alpha_t/alpha_t_minus_one)))
-                # print(alpha_t, alpha_t_minus_one, sigma)
+                
                 k = torch.sqrt(1 - alpha_t_minus_one - sigma**2)
                 pred_x0 = torch.sqrt(alpha_t_minus_one) * (x - torch.sqrt(1 - alpha_t)*pred_noise)/torch.sqrt(alpha_t)
 
                 x = pred_x0 + k * pred_noise + sigma * noise
             
             ftime = time()
-            # print(f"sampling denoised minmax: {torch.min(x), torch.max(x)}")
             x = self.autoencoder.decode(x)
-            # print(f"decoded x minmax: {torch.min(x), torch.max(x)}")
-            print(f"decoded shape: {x.shape}")
             # torchshow.save(x, os.path.join(img_save_dir, f"latent_ddim_sample_{ep}.jpeg"))
-            torchshow.save(x, os.path.join("./", f"latent_ddim_sample_{ep}.jpeg"))
             print(f"Done denoising in {ftime - stime}s ")
         
         return x
-
 
 
     def sample(self, ep = None, num_samples = 16):
@@ -131,20 +107,12 @@ class LatentDiffusion(nn.Module):
                 if i > 1:
                     noise = torch.randn_like(x)
                     x = x + torch.sqrt(beta_t) * noise
-
-                # print(f"sampling denoised within loop minmax: {torch.min(x), torch.max(x)}")
             
-            # print()
         ftime = time()
-        # x = self.autoencoder.decoder(x)
-        print(f"sampling ... xshape: {x.shape}")
-        # print(f"sampling denoised minmax: {torch.min(x), torch.max(x)}")
         x = self.autoencoder.decode(x)
-        # print(f"decoded x minmax: {torch.min(x), torch.max(x)}")
         print(f"decoded shape: {x.shape}")
         # torchshow.save(x, os.path.join(img_save_dir, f"latent_sample_{ep}.jpeg"))
-        torchshow.save(x, os.path.join("./", f"latent_sample_{ep}.jpeg"))
-        print(f"Done denoising in {ftime - stime}s ")
+        print(f"Done denoising in {ftime - stime}s")
         return x
 
 
@@ -156,30 +124,20 @@ class LatentDiffusion(nn.Module):
 
     def forward(self, x):
         bs = x.shape[0]
-        # z = self.autoencoder.encoder(x) # get latent space
         z, _, _ = self.autoencoder.encode(x) # get latent space
-        # print(f"encoded shape: {z.shape}")
-        # print(f"autoencoder op minmax: {torch.min(z), torch.max(z)}")
         ts = torch.randint(low = 1, high = self.time_steps, size = (bs, ), device = device)
         z_noised, noise = self.diffusion_model.add_noise(z, ts)
-        # print(f"ldm shapes: {z_noised.shape}; {noise.shape}; {ts.shape}")
         return z_noised, noise, ts
 
 
 
-def train_ldm(load_checkpoint = False, continue_from = 149 + 1):
-    ldm = LatentDiffusion(autoencoder_model_path = autoencoder_model_path, time_steps = time_steps)
-    # c, h, w = img_sz
-    # assert h == w, f"height and width must be same, got {h} as height and {w} as width"
+def train_ldm(load_checkpoint = False, continue_from = 199 + 1):
+    ldm = LatentDiffusion(m = m, c = c, autoencoder_model_path = autoencoder_model_path, time_steps = time_steps)
     
     if load_checkpoint:
-        # _model_path = f"./vaemodels_m{c}c{c}t{time_steps}/models/ldm_221.pt"
-        _model_path = os.path.join(model_save_dir, f"ldm_145.pt")
-        # _model_path = "./vaemodels_m16c128/models/ldm_46.pt"
+        _model_path = os.path.join(model_save_dir, f"ldm_200_old.pt")
         ldm.load_state_dict(torch.load(_model_path))
         print(f"loaded ldm weights from {_model_path}")
-
-    # assert os.path.exists(autoencoder_model_path), f"{autoencoder_model_path} not found !"
 
     loader = get_dataloader(dataset_type="custom", img_sz = img_sz, batch_size = batch_size, limit = -1)
 
@@ -198,17 +156,10 @@ def train_ldm(load_checkpoint = False, continue_from = 149 + 1):
         stime = time()
         
         for i, x in enumerate(loader):
-        # for i, (x, _) in enumerate(loader):
             x = x.to(device)
-            # print(torch.min(x), torch.max(x))
-            # print(f"init x shape {x.shape}")
             z_noised, target_noise, ts = ldm(x)
-            # print(f"znoised shape {z_noised.shape}")
-            # print(torch.min(z_noised), torch.max(z_noised))
-
+            
             predicted_noise = ldm.diffusion_model(z_noised, ts)
-            # print(f"unet output shape: {predicted_noise.shape}")
-            # print(f"unet minmax: {torch.min(predicted_noise), torch.max(predicted_noise)}")
             loss = criterion(target_noise, predicted_noise)
             
             opt.zero_grad()
@@ -243,12 +194,7 @@ def test_noise():
 
     for i, x in enumerate(loader):
         x = x.to(device)
-
-        # z = ldm.autoencoder.encoder(x)
-        # z_noised, target_noise, ts = ldm(x)
-        # noised_recons_image = ldm.autoencoder.decoder(z_noised)
-        # recons_image = ldm.autoencoder.decoder(z)
-
+        
         # vae 
         z, _, _ = ldm.autoencoder.encode(x)
         z_noised, target_noise, ts = ldm(x)
